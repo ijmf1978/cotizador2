@@ -524,7 +524,7 @@ function viewEditor(id){
     const q = DB.cotizaciones.find(x => x.id === id);
     if(!q){ toast('Cotización no encontrada', true); return go('#/historial'); }
     if(!canTouch(q)){ toast('Solo puedes editar tus propias cotizaciones', true); return go('#/ver/'+id); }
-    if(!draft || draft.id !== id) draft = plain(q);
+    if(!draft || draft.id !== id){ draft = plain(q); (draft.items||[]).forEach(it => it.descuento = 0); }
   } else if(!draft || draft.id || draft._from !== 'nueva'){ draft = newDraft(); }
   const prodOpts = DB.productos.map(p => `<option value="${esc(p.codigo)} · ${esc(p.descripcion)}">`).join('');
   const selCli = DB.clientes.find(x => x.id === draft.clienteId);
@@ -553,7 +553,7 @@ function viewEditor(id){
           <button class="btn pri" id="e-padd">Agregar</button>
         </div>` : `<p class="muted">No hay productos registrados. ${isAdmin()?'<a href="#/productos">Crea tus productos</a> primero.':'Pide al administrador que cargue los productos.'}</p>`}
         <div class="tbl-wrap"><table class="t lines"><thead><tr>
-          <th>Descripción</th><th class="num">Cant.</th><th class="num">Precio USD</th><th class="num">Desc. %</th><th class="num">Total USD</th><th></th>
+          <th>Descripción</th><th class="num">Cant.</th><th class="num">Precio USD</th><th class="num">Total USD</th><th></th>
         </tr></thead><tbody id="e-lines"></tbody></table></div>
       </div>
       <div class="card">
@@ -673,6 +673,7 @@ function setupClienteSearch(){
   });
   inp.addEventListener('blur', () => setTimeout(() => {
     close();
+    if(!draft || !document.body.contains(inp)) return;
     if(!draft.clienteId && inp.value.trim()){ const r = buscarClientes(inp.value, 2); if(r.total === 1) elegir(r.list[0]); }
   }, 150));
   clr.onclick = () => { draft.clienteId = ''; editorDirty = true; inp.value = ''; clr.classList.add('hidden'); cliInfo(); inp.focus(); };
@@ -683,12 +684,11 @@ function cliInfo(){
 }
 function renderLines(){
   const tb = $('#e-lines');
-  if(!draft.items.length){ tb.innerHTML = `<tr><td colspan="6" class="empty">Agrega productos a la cotización</td></tr>`; renderTotals(); return; }
+  if(!draft.items.length){ tb.innerHTML = `<tr><td colspan="5" class="empty">Agrega productos a la cotización</td></tr>`; renderTotals(); return; }
   tb.innerHTML = draft.items.map((it,i) => `<tr>
     <td class="desc"><div>${esc(it.descripcion)}</div><div class="small muted">${esc(it.codigo)} · ${esc(it.unidad||'')}${it.ivaTipo==='E'?' · Exento':it.ivaTipo==='R'?' · IVA reducido':''}</div></td>
     <td class="num" data-l="Cant."><input class="q" type="number" step="any" min="0" data-i="${i}" data-k="cantidad" value="${it.cantidad}" inputmode="decimal"></td>
     <td class="num" data-l="Precio USD"><input class="p" type="number" step="0.01" min="0" data-i="${i}" data-k="precio" value="${it.precio}" inputmode="decimal"></td>
-    <td class="num" data-l="Desc. %"><input class="d" type="number" step="0.01" min="0" max="100" data-i="${i}" data-k="descuento" value="${it.descuento||0}" inputmode="decimal"></td>
     <td class="num tot" id="lt-${i}">${usd(lineTotal(it))}</td>
     <td class="del"><button class="btn sm danger" data-del="${i}" aria-label="Quitar">✕</button></td></tr>`).join('');
   tb.querySelectorAll('input').forEach(inp => inp.addEventListener('input', e => {
@@ -804,6 +804,7 @@ function quoteAction(a, q){
     const d = plain(q); const c = C();
     Object.assign(d, { id:null, numero:'', fecha:hoy(), vence:addDays(hoy(), d.vigenciaDias||c.vigenciaDias), estado:'Pendiente', tasa:+c.tasa.valor||d.tasa, usuario:USER.nombre, usuarioId:USER.id, _from:'nueva' });
     delete d.creado; delete d.modificado;
+    (d.items||[]).forEach(it => it.descuento = 0);
     draft = d; toast('Copia creada: revisa y guarda'); return go('#/nueva');
   }
   if(a==='del') return confirmBox(`¿Eliminar la cotización <b>${esc(q.numero)}</b>? Esta acción no se puede deshacer.`, async () => {
